@@ -29,24 +29,10 @@ xld [-c cuesheet] [--ddpms DDPMSfile] [-e] [-f format] [-o outpath] [-t track] [
     --logchecker <path>: Check sanity of a logfile in <path>
 */
 
-/*
-var convert = function(file, cb) {
-    console.log('Processing the file: %s', file);
-    var xld = spawn('xld', ['-f', 'alac', file]);
-    xld.stdout.on('data', function(data) {
-        //console.log(data);
-        //util.print(data + "\r");
-    });
-    xld.stderr.on('data', function(data) {
-        util.print(data + "\r");
-    });
-    xld.on('exit', function(code) {
-        cb(null, code);
-    });
-};
-*/
-
 var exec = require('child_process').exec;
+var path = require('path');
+var EventEmitter = require('events').EventEmitter;
+var sys = require('sys');
 
 /**
  * Expose the 'XLD' API.
@@ -58,36 +44,76 @@ exports = module.exports = Xld;
  */
 exports.version = '0.0.1';
 
-/**
- *
- */
-function Xld(filename, options) {
-    this.supportedFormats = ['wav', 'aif', 'raw_big', 'raw_little', 'mp3', 'aac', 'flac', 'alac', 'vorbis', 'wavpack'];
-    this.filename = filename;
-    this.options = [];
-
-    // format
-    this.format = options.format || 'wav';
-
-    if (this.supportedFormats.indexOf(options.format) === -1) {
-        throw new Error('The format %s is not supported. Supported formats are: %s', options.format, this.supportedFormats);
-    }
-
-    this.options.push('-f ' + this.format);
+var FORMATS = exports.formats = {
+    wav: 'wav',
+    aif: 'aif',
+    raw_big: 'raw_big',
+    raw_little: 'raw_little',
+    mp3: 'mp3',
+    aac: 'aac',
+    flac: 'flac',
+    alac: 'alac',
+    vorbis: 'vorbis',
+    wavpack: 'wavpack'
 };
 
 /**
  *
  */
-Xld.prototype.exec = function(cb) {
-    var cmd = 'xld ' + this.options.join(' ') + ' "' + this.filename + '"';
+function Xld(options) {
+    EventEmitter.call(this);
+
+    options = options || {};
+    this.debug = options.debug || false;
+}
+
+/**
+ * Inherit from EventEmitter.
+ */
+sys.inherits(Xld, EventEmitter);
+
+/**
+ *
+ */
+Xld.prototype.convert = function(filename, options) {
+    var self = this;
+    var xldOptions = [];
+    if (options.format && !isFormatSupported(options.format)) {
+        throw new Error('The format %s is not supported', options.format);
+    }
+
+    //xldOptions.push('--stdout');
+    xldOptions.push('-f ' + (options.format || 'wav'));
+    xldOptions.push('-o "' + (options.output || __dirname) + '"');
+
+    var cmd = 'xld ' + xldOptions.join(' ') + ' "' + filename + '"';
+    if (this.debug) {
+        console.log(cmd);
+    }
+    
     var proc = exec(cmd, function(err, stdout, stderr) {
-        console.log(stdout);
-        console.log(stderr);
         if (err !== null) {
-            cb(err);
+            self.emit('error', new Error(err.message));
         } else {
-            cb(null, stdout);
+            if (/done/.test(stderr)) {
+                self.emit('trackConverted', {
+                    filename: filename
+                });
+            } else {
+                var error = new Error('Error converting the file');
+                error.filename = filename;
+                error.output = stderr;
+                error.cmd = cmd;
+                self.emit('error', error);
+            }
         }
     });
 };
+
+/*
+ * Private API
+ */
+
+function isFormatSupported(format) {
+    return FORMATS.hasOwnProperty(format);
+}

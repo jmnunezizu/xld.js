@@ -1,5 +1,5 @@
 {
-    "name": "xld.js",
+    "name": "xld",
     "version": "0.0.1",
     "description": "Wrapper for the OS X XLD tool",
     "keywords": ["cli", "xld.js", "xld"],
